@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ezcompiler</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <style>
+        body { background-color: #1e1e1e; color: white; font-family: Arial, sans-serif; }
+        .container { max-width: 1100px; margin: auto; padding: 20px; position: relative; }
+        .editor-container { display: flex; height: 75vh; gap: 10px; }
+        .editor, .output-container { flex: 1; padding: 15px; background: #2c2c2c; border-radius: 8px; }
+        .editor textarea, .output-container pre { width: 100%; height: 100%; border: none; padding: 10px; font-size: 14px; }
+        .input-box { margin-top: 10px; display: none; }
+
+        .input-box textarea { width: 100%; padding: 8px; border-radius: 5px; font-size: 14px; }
+
+        /* Hidden Question Box */
+        /* Updated Question Box Styling */
+.question-box { 
+    display: none; 
+    position: absolute; 
+    top: 50px; 
+    left: 50%; 
+    transform: translateX(-50%);
+    width: 60%; /* Made it wider */
+    background: #2c2c2c;
+    padding: 15px;
+    border-radius: 10px;
+    box-shadow: 0 4px 10px rgba(255, 255, 255, 0.2);
+}
+
+/* Improved Input Field */
+#java_question {
+    width: 100%; /* Full width */
+    padding: 12px; /* Better padding */
+    border-radius: 6px; 
+    font-size: 16px; /* Bigger text */
+    background: #3c3c3c;
+    color: white;
+    border: 1px solid #555;
+}
+
+/* Improved Generate Button */
+#generateCode {
+    width: 40%;
+    padding: 10px;
+    font-size: 16px;
+    background-color: #082b32;
+    display: block; /* Make it a block element */
+    margin: 10px auto; /* Center horizontally */
+    text-align: center;
+    border-radius: 6px;
+    color: white;
+}
+
+
+
+        /* Buttons at Top Right */
+        .top-buttons {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+        }
+        .btn {
+            padding: 8px 12px;
+            font-size: 14px;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+        .btn-green { background: #28a745; color: white; }
+        .btn-green:hover { background: #1e7e34; }
+        .btn-blue { background: #007BFF; color: white; }
+        .btn-blue:hover { background: #0056b3; }
+
+        /* Toggle Button */
+        .toggle-btn {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: #ffcc00;
+            color: black;
+            padding: 8px 10px;
+            border-radius: 50%;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+        .toggle-btn:hover { background: #ffdd44; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-center text-xl font-bold mb-4" style="font-family:'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif; font-size: 20px; color: #ffffff; letter-spacing: 1px; text-transform: uppercase;">ezcompiler</h1>
+
+        <!-- Hidden Java Question Input (Dropdown) -->
+        <button id="toggleQuestion" class="toggle-btn">💡</button>
+        <div id="questionBox" class="question-box">
+            <textarea id="java_question" class="p-2 border rounded text-black" placeholder="Enter your Java question..."></textarea>
+            <button id="generateCode" class="btn btn-blue mt-2">Generate</button>
+        </div>
+
+        <!-- Run Button at Top Right -->
+        <div class="top-buttons">
+            <button id="runCode" class="btn btn-green" disabled>Run</button>
+        </div>
+
+        <div class="editor-container">
+            <!-- Code Editor -->
+            <div class="editor">
+                <!-- <p id="javaComment" style="color: red; font-weight: bold;">/** Please use class name Main */</p> -->
+                <textarea id="java_code" class="p-2 rounded text-black" placeholder="Write or generate Java code here..."></textarea>
+                <span class="loading" id="loadingText" style="display: none;">Generating...</span>
+            </div>
+
+            <!-- Output Section -->
+            <div class="output-container">
+                <pre id="compiler_output" class="bg-gray-900 p-2 rounded text-yellow-400 overflow-auto"></pre>
+            </div>
+        </div>
+
+        <!-- Dynamic User Input Box (Hidden by Default) -->
+        <div class="input-box">
+            <textarea id="user_input" class="p-2 border rounded text-black" placeholder="Enter input values (comma-separated)..."></textarea>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+    let javaCode = document.getElementById("java_code");
+    javaCode.value = "/** Please use class name **Main** */\n\n";
+    
+    // Prevent editing the first line
+    javaCode.addEventListener("keydown", function (event) {
+        let cursorPos = javaCode.selectionStart;
+        let firstLineEnd = javaCode.value.indexOf("\n");
+
+        if (cursorPos <= firstLineEnd) {
+            event.preventDefault();
+        }
+    });
+});
+
+       document.getElementById("java_code").addEventListener("keydown", function (event) {
+    let editor = this;
+    let cursorPos = editor.selectionStart;
+    let textBefore = editor.value.substring(0, cursorPos);
+    let textAfter = editor.value.substring(cursorPos);
+    
+    // Auto-close brackets, quotes, etc.
+    const pairs = {
+        "{": "}",
+        "(": ")",
+        "[": "]",
+        "'": "'",
+        '"': '"'
+    };
+
+    if (pairs[event.key]) {
+        event.preventDefault(); // Stop default typing behavior
+        editor.value = textBefore + event.key + pairs[event.key] + textAfter;
+        editor.selectionStart = editor.selectionEnd = cursorPos + 1; // Move cursor inside brackets
+    }
+
+    // Auto-indent new line inside braces
+    if (event.key === "Enter") {
+        let lastChar = textBefore[textBefore.length - 1];
+        let nextChar = textAfter[0];
+
+        if (lastChar === "{" && nextChar === "}") {
+            event.preventDefault();
+            let indent = "    "; // 4 spaces indentation
+            editor.value = textBefore + "\n" + indent + "\n" + textAfter;
+            editor.selectionStart = editor.selectionEnd = cursorPos + indent.length + 1;
+        }
+    }
+});
+
+
+        // Toggle Question Box Visibility
+        document.getElementById("toggleQuestion").addEventListener("click", function() {
+            let box = document.getElementById("questionBox");
+            box.style.display = box.style.display === "none" ? "block" : "none";
+        });
+
+        // Generate Code
+        document.getElementById("generateCode").addEventListener("click", function() {
+            let question = document.getElementById("java_question").value.trim();
+            let csrfToken = "{{ csrf_token }}";
+            let loadingText = document.getElementById("loadingText");
+
+            if (!question) return alert("Please enter a Java question!");
+
+            loadingText.style.display = "inline";
+
+            fetch("/", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken },
+                body: JSON.stringify({ java_question: question })
+            })
+            .then(response => response.json())
+            .then(data => {
+                loadingText.style.display = "none";
+                document.getElementById("java_code").value = data.java_code.trim();
+                document.getElementById("questionBox").style.display = "none"; // Auto-close dropdown
+                checkForScanner();
+            })
+            .catch(error => {
+                loadingText.style.display = "none";
+                alert("Error generating code");
+                console.error(error);
+            });
+        });
+
+        // Check for Scanner in Code
+        function checkForScanner() {
+            let code = document.getElementById("java_code").value;
+            let inputBox = document.querySelector(".input-box");
+            let runButton = document.getElementById("runCode");
+
+            if (code.trim().length > 0) {
+                runButton.disabled = false; // Enable Run Button
+            } else {
+                runButton.disabled = true;
+            }
+
+            if (code.includes("Scanner")) {
+                inputBox.style.display = "block";
+            } else {
+                inputBox.style.display = "none";
+            }
+        }
+
+        // Enable Run Button when user types manually
+        document.getElementById("java_code").addEventListener("input", checkForScanner);
+
+        // Run Code
+        document.getElementById("runCode").addEventListener("click", function() {
+            let code = document.getElementById("java_code").value;
+            let userInput = document.getElementById("user_input").value.trim();
+            let csrfToken = "{{ csrf_token }}";
+
+            if (code.includes("Scanner") && !userInput) {
+                alert("Please enter input values before running the code.");
+                return;
+            }
+
+            fetch("/run", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken },
+                body: JSON.stringify({ java_code: code, user_input: userInput.split(",").map(str => str.trim()) })
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById("compiler_output").textContent = data.output;
+            })
+            .catch(error => {
+                alert("Error running code");
+                console.error(error);
+            });
+        });
+    </script>
+</body>
+</html>
